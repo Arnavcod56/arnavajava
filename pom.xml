@@ -26,8 +26,6 @@
       <artifactId>h2</artifactId>
       <scope>runtime</scope>
     </dependency>
-
-    <!-- Optional: for JSON mapping if needed -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
