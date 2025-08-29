@@ -117,8 +117,6 @@ public class WebhookSolverApplication {
         """);
 
         jdbcTemplate.update("INSERT INTO department VALUES (1,'HR'),(2,'Finance'),(3,'Engineering'),(4,'Sales'),(5,'Marketing'),(6,'IT')");
-
-        // Insert EMPLOYEE data
         jdbcTemplate.update("INSERT INTO employee VALUES (1,'John','Williams','1980-05-15','Male',3)");
         jdbcTemplate.update("INSERT INTO employee VALUES (2,'Sarah','Johnson','1990-07-20','Female',2)");
         jdbcTemplate.update("INSERT INTO employee VALUES (3,'Michael','Smith','1985-02-10','Male',3)");
