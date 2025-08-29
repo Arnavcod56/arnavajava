@@ -1,0 +1,149 @@
+
+
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.*;
+
+@SpringBootApplication
+public class WebhookSolverApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebhookSolverApplication.class, args);
+    }
+
+    @Bean
+    CommandLineRunner run(JdbcTemplate jdbcTemplate) {
+        return args -> {
+            setupSchemaAndData(jdbcTemplate);
+
+            String generatorUrl = "https://bfhldevapigw.healthrx.co.in/hiring/generateWebhook/JAVA";
+            RestTemplate rest = new RestTemplate();
+
+            Map<String, Object> requestBody = Map.of(
+                    "name", "John Doe",
+                    "regNo", "REG12347",
+                    "email", "john@example.com"
+            );
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String,Object>> req = new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<Map> genResp = rest.postForEntity(generatorUrl, req, Map.class);
+
+            if (!genResp.getStatusCode().is2xxSuccessful() || genResp.getBody() == null) {
+                System.err.println("Error getting webhook: " + genResp);
+                return;
+            }
+
+            String webhook = (String) genResp.getBody().get("webhook");
+            String accessToken = (String) genResp.getBody().get("accessToken");
+
+            System.out.println("Webhook URL: " + webhook);
+            System.out.println("Access Token: " + accessToken);
+
+            String solutionSql = """
+                SELECT e.emp_id,
+                       e.first_name,
+                       e.last_name,
+                       d.department_name,
+                       COUNT(e2.emp_id) AS younger_employees_count
+                FROM employee e
+                JOIN department d
+                  ON e.department = d.department_id
+                LEFT JOIN employee e2
+                  ON e2.department = e.department
+                 AND e2.dob > e.dob
+                GROUP BY e.emp_id, e.first_name, e.last_name, d.department_name
+                ORDER BY e.emp_id DESC
+                """;
+
+            List<Map<String,Object>> rows = jdbcTemplate.queryForList(solutionSql);
+            System.out.println("Result rows: " + rows.size());
+            rows.forEach(System.out::println);
+
+            HttpHeaders sendHeaders = new HttpHeaders();
+            sendHeaders.setContentType(MediaType.APPLICATION_JSON);
+            sendHeaders.setBearerAuth(accessToken);
+
+            Map<String, String> answerPayload = Map.of("query", solutionSql);
+
+            HttpEntity<Map<String, String>> answerReq = new HttpEntity<>(answerPayload, sendHeaders);
+
+            ResponseEntity<String> resp = rest.postForEntity(webhook, answerReq, String.class);
+            System.out.println("Webhook response: " + resp.getStatusCode());
+            System.out.println("Body: " + resp.getBody());
+        };
+    }
+
+    private void setupSchemaAndData(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS payments");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS employee");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS department");
+
+        jdbcTemplate.execute("""
+            CREATE TABLE department (
+              department_id INT PRIMARY KEY,
+              department_name VARCHAR(100)
+            )
+        """);
+
+        jdbcTemplate.execute("""
+            CREATE TABLE employee (
+              emp_id INT PRIMARY KEY,
+              first_name VARCHAR(100),
+              last_name VARCHAR(100),
+              dob DATE,
+              gender VARCHAR(10),
+              department INT,
+              FOREIGN KEY (department) REFERENCES department(department_id)
+            )
+        """);
+
+        jdbcTemplate.execute("""
+            CREATE TABLE payments (
+              payment_id INT PRIMARY KEY,
+              emp_id INT,
+              amount DECIMAL(12,2),
+              payment_time TIMESTAMP,
+              FOREIGN KEY (emp_id) REFERENCES employee(emp_id)
+            )
+        """);
+
+        jdbcTemplate.update("INSERT INTO department VALUES (1,'HR'),(2,'Finance'),(3,'Engineering'),(4,'Sales'),(5,'Marketing'),(6,'IT')");
+
+        // Insert EMPLOYEE data
+        jdbcTemplate.update("INSERT INTO employee VALUES (1,'John','Williams','1980-05-15','Male',3)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (2,'Sarah','Johnson','1990-07-20','Female',2)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (3,'Michael','Smith','1985-02-10','Male',3)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (4,'Emily','Brown','1992-11-30','Female',4)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (5,'David','Jones','1988-09-05','Male',5)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (6,'Olivia','Davis','1995-04-12','Female',1)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (7,'James','Wilson','1983-03-25','Male',6)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (8,'Sophia','Anderson','1991-08-17','Female',4)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (9,'Liam','Miller','1979-12-01','Male',1)");
+        jdbcTemplate.update("INSERT INTO employee VALUES (10,'Emma','Taylor','1993-06-28','Female',5)");
+        jdbcTemplate.update("INSERT INTO payments VALUES (1,2,65784.00,'2025-01-01 13:44:12.824')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (2,4,62736.00,'2025-01-06 18:36:37.892')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (3,1,69437.00,'2025-01-01 10:19:21.563')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (4,3,67183.00,'2025-01-02 17:21:57.341')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (5,2,66273.00,'2025-02-01 11:49:15.764')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (6,5,71475.00,'2025-01-01 07:24:14.453')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (7,1,70837.00,'2025-02-03 19:11:31.553')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (8,6,69628.00,'2025-01-02 10:41:15.113')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (9,4,71876.00,'2025-02-01 12:16:47.807')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (10,3,70098.00,'2025-02-03 10:11:17.341')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (11,6,67827.00,'2025-02-02 19:21:27.753')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (12,5,69871.00,'2025-02-05 17:54:17.453')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (13,2,72984.00,'2025-03-05 09:37:35.974')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (14,1,67982.00,'2025-03-01 06:09:51.983')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (15,6,70198.00,'2025-03-02 10:34:35.753')");
+        jdbcTemplate.update("INSERT INTO payments VALUES (16,4,74998.00,'2025-03-02 09:27:26.162')");
+    }
+}
